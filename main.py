@@ -1,4 +1,5 @@
 # pip install pygame PyOpenGL PyOpenGL_accelerate pygltflib numpy
+# python -m pip install pygame PyOpenGL PyOpenGL_accelerate pygltflib numpy
 
 
 import os
@@ -258,24 +259,36 @@ class InfiniteTrack:
             self.add_segment(i * self.seg_len)
 
     def add_segment(self, z):
-        # return
+        return
+    
+    """
+    요구사항
+    1.1. print: z값과 obstacles print하기 (f-string, formatting 방법 사용하기)
+    2.1. lanes를 random모듈을 사용하여 섞어보기
+    2.2. random모듈을 사용하여 35%의 확률을 구현하기
+    3.1. (x, 0.25, z + self.seq_len/2)라는 3가지 객체를 갖는 리스트 생성해보기
+    3.2. obstacles라는 list에 3.1번에 생성한 리스트 넣기
+    3.3. self.segments라는 list에 (z, obstacles)로 이루어진 list 넣기
+    """
+    """
         obstacles = []
         lanes = [-1, 0, 1]
-        random.shuffle(lanes)
+        (2.1번 문제)
 
         for lane in lanes:
             if len(obstacles)>=1:
                 break
 
-            if random.random() < 0.35:
+            if (2.2번 문제)
                 x = lane*self.lane_width
-                obstacles.append([x, 0.25, z + self.seg_len/2])
+                (3.1번 문제)
+                (3.2번 문제)
 
-        self.segments.append([z, obstacles])
+        (3.3번 문제)
 
-        print(f"Z is {z}")
-        print(f"obstacles created : {obstacles}")
-
+        (1.1번 문제)
+    """
+    
     def update(self, car_pos):
         while self.segments and (self.segments[0][0] + self.seg_len) < car_pos[2]-20:
             self.segments.pop(0)
