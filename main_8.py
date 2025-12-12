@@ -13,11 +13,12 @@ MODEL_PATH = r"files/source/police_car.glb"
 WINDOW_SIZE = (1280, 720)
 MAX_SPEED = 80.0
 
-# OBSTACLE_DICT = {
-#     "cone": r'files/source/obstacle_cone.glb',
-#     "broken_glass": r'files/source/obstacle_broken_glass.glb',
-#     "cylinder": r'files/source/obstacle_cylinder.glb',
-# }
+## obstacle_dict라는 이름으로 파일 명과 
+OBSTACLE_DICT = {
+    "cone": r'files/source/obstacle_cone.glb',
+    "broken_glass": r'files/source/obstacle_broken_glass.glb',
+    "cylinder": r'files/source/obstacle_cylinder.glb',
+}
 
 RENDER_DISTANCE = 60.0
 LOD_PROXY_DISTANCE = 30.0
