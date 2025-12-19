@@ -1,2 +1,2 @@
-main_*.py
+main_[0-9].py
 __pycache__/*
