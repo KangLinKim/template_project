@@ -452,10 +452,10 @@ class CarGLB:
     def handle_input(self, events):
         for e in events:
             if e.type == KEYDOWN:
-                if e.key == K_d:
+                if e.key == K_a:
                     self.target_lane = min(1, self.target_lane + 1)
 
-                elif e.key == K_a:
+                elif e.key == K_d:
                     self.target_lane = max(-1, self.target_lane - 1)
 
     def check_collision(self):
@@ -863,7 +863,7 @@ def main_scene():
     pygame.init()
     pygame.font.init()
     pygame.display.set_mode(WINDOW_SIZE, DOUBLEBUF | OPENGL)
-    pygame.display.set_caption("Debug Viewer - Side Panels Corrected")
+    pygame.display.set_caption("휴몬랩코딩 3주차")
 
     glEnable(GL_DEPTH_TEST)
     glEnable(GL_CULL_FACE)
