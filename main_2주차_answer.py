@@ -1,7 +1,3 @@
-# pip install pygame PyOpenGL PyOpenGL_accelerate pygltflib numpy
-# python -m pip install pygame PyOpenGL PyOpenGL_accelerate pygltflib numpy
-
-
 import os
 import io
 import math
@@ -17,6 +13,19 @@ MODEL_PATH = r"files/source/police_car.glb"
 WINDOW_SIZE = (1280, 720)
 MAX_SPEED = 80.0
 
+"""
+요구사항
+1.1. OBSTACLE_DICT라는 이름으로 dictionary를 생성하고, 원하는 이름으로 key를 생성, 아래 3개의 주소를 value로 설정
+    'files/source/obstacle_cone.glb',
+    'files/source/obstacle_broken_glass.glb',
+    'files/source/obstacle_cylinder.glb',
+"""
+OBSTACLE_DICT = {
+    "cone": r'files/source/obstacle_cone.glb',
+    "broken_glass": r'files/source/obstacle_broken_glass.glb',
+    "cylinder": r'files/source/obstacle_cylinder.glb',
+}
+
 RENDER_DISTANCE = 60.0
 LOD_PROXY_DISTANCE = 30.0
 TRACK_VISIBLE_AHEAD = 80.0
@@ -24,27 +33,13 @@ TRACK_VISIBLE_BEHIND = 20.0
 
 SCORE = 0
 
-
-"""
-요구사항
-1.1. OBSTACLE_DICT라는 이름으로 dictionary를 생성하고, 원하는 이름으로 key를 생성, 아래 3개의 주소를 value로 설정
-    'files/source/obstacle_cone.glb'
-    'files/source/obstacle_broken_glass.glb'
-    'files/source/obstacle_cylinder.glb'
-
-1.2. BACKGROUND_LAYER_FILES라는 이름의 List를 생성하고, 아래 5개의 주소를 넣기
-    "files/background/Layer_0.png"
-    "files/background/Layer_1.png"
-    "files/background/Layer_2.png"
-    "files/background/Layer_3.png"
-    "files/background/Layer_4.png"
-    
-2.1, 2.2번 문제는 573번 줄에 있음.
-
-3.1번 문제는 656번 줄에 있음.
-"""
-# (1.1번 문제)
-# (1.2번 문제)
+BACKGROUND_LAYER_FILES = [
+    r"files/background/Layer_0.png",
+    r"files/background/Layer_1.png",
+    r"files/background/Layer_2.png",
+    r"files/background/Layer_3.png",
+    r"files/background/Layer_4.png",
+]
 
 
 def draw_text_gl(text, x, y, size=20, color=(255, 255, 255)):
@@ -571,18 +566,14 @@ def load_background_layers(file_list):
         base_speed = 0.012
         speed_multiplier = base_speed * (1.0 + (i / max(1, n - 1)) * 3.0)
 
-        """
-        2.1. 아래 명시된 5개의 쌍으로 dictionary를 만들어보기
-            "path" - path
-            "tex" - texid
-            "width" - float(tw)
-            "height" - float(th)
-            "speed" - float(speed_multiplier)
-            "index" - i
-        2.2. 2.1번에서 생성한 dictionary를 layers라는 list에 추가하기
-        """
-        # (2.1번 문제)
-        # (2.2번 문제)
+        layers.append({
+            "path": path,
+            "tex": texid,
+            "width": float(tw),
+            "height": float(th),
+            "speed": float(speed_multiplier),
+            "index": i
+        })
         
     return layers
 
@@ -653,10 +644,6 @@ def draw_background_panels(layers, car_pos):
 
 
 def main():
-    """
-    3.1. 25번 줄에 선언된 SCORE함수에 접근하기 
-    """
-    """ local 변수와 global 변수"""
     global SCORE
 
     pygame.init()
