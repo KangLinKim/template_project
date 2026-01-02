@@ -13,7 +13,10 @@ from OpenGL.GLU import *
 from pygltflib import GLTF2
 import random
 
-MODEL_PATH = r"files/source/police_car.glb"
+CURRENT_FILE = os.path.abspath(__file__)
+CURRENT_FILE = os.path.dirname(CURRENT_FILE)
+
+MODEL_PATH = os.path.join(CURRENT_FILE, r"files/source/police_car.glb")
 WINDOW_SIZE = (1280, 720)
 MAX_SPEED = 80.0
 
@@ -24,28 +27,31 @@ TRACK_VISIBLE_BEHIND = 20.0
 
 SCORE = 0
 
+TITLE_BG_PATH = os.path.join(CURRENT_FILE, r"files/images/title.jpg")
 
-"""
-요구사항
-1.1. OBSTACLE_DICT라는 이름으로 dictionary를 생성하고, 원하는 이름으로 key를 생성, 아래 3개의 주소를 value로 설정
-    'files/source/obstacle_cone.glb'
-    'files/source/obstacle_broken_glass.glb'
-    'files/source/obstacle_cylinder.glb'
+UI_DICT = {
+    "quit_button_on"   : os.path.join(CURRENT_FILE, r'files/UI/quit_button_on.png'),
+    "quit_button_off"  : os.path.join(CURRENT_FILE, r'files/UI/quit_button_off.png'),
+    "start_button_on"  : os.path.join(CURRENT_FILE, r'files/UI/start_button_on.png'),
+    "start_button_off" : os.path.join(CURRENT_FILE, r'files/UI/start_button_off.png'),
+}
 
-1.2. BACKGROUND_LAYER_FILES라는 이름의 List를 생성하고, 아래 5개의 주소를 넣기
-    "files/background/Layer_0.png"
-    "files/background/Layer_1.png"
-    "files/background/Layer_2.png"
-    "files/background/Layer_3.png"
-    "files/background/Layer_4.png"
-    
-2.1, 2.2번 문제는 573번 줄에 있음.
+OBSTACLE_DICT = {
+    "cone": os.path.join(CURRENT_FILE, r'files/source/obstacle_cone.glb'),
+    "broken_glass": os.path.join(CURRENT_FILE, r'files/source/obstacle_broken_glass.glb'),
+    "cylinder": os.path.join(CURRENT_FILE, r'files/source/obstacle_cylinder.glb'),
+}
 
-3.1번 문제는 656번 줄에 있음.
-"""
-# (1.1번 문제)
-# (1.2번 문제)
+BACKGROUND_LAYER_FILES = [
+    os.path.join(CURRENT_FILE, r"files/background/Layer_0.png"),
+    os.path.join(CURRENT_FILE, r"files/background/Layer_1.png"),
+    os.path.join(CURRENT_FILE, r"files/background/Layer_2.png"),
+    os.path.join(CURRENT_FILE, r"files/background/Layer_3.png"),
+    os.path.join(CURRENT_FILE, r"files/background/Layer_4.png"),
+]
 
+def getSCORE():
+    return SCORE
 
 def draw_text_gl(text, x, y, size=20, color=(255, 255, 255)):
     font = pygame.font.SysFont("Arial", size, bold=True)
@@ -287,8 +293,10 @@ class ObstacleModel:
         glScalef(self.scale, self.scale, self.scale)
         if use_proxy:
             glCallList(self.proxy_list)
+
         else:
             glCallList(self.full_list)
+
         glPopMatrix()
 
 class InfiniteTrack:
@@ -332,14 +340,15 @@ class InfiniteTrack:
     def draw(self, camera_z):
         glDisable(GL_CULL_FACE)
 
-        ground_y = -50
-        ground_width = self.lane_width * 20.0
-        extra_range = 1000
+        ground_y = -100
+        ground_width = self.lane_width * 60.0
+        extra_range = 2000
 
         gz0 = camera_z - TRACK_VISIBLE_BEHIND - extra_range
         gz1 = camera_z + TRACK_VISIBLE_AHEAD  + extra_range
 
-        glColor3f(0.45, 0.30, 0.15)
+        r, g, b = 171/255.0, 148/255.0, 122/255.0
+        glColor3f(r, g, b)
 
         glBegin(GL_QUADS)
         glVertex3f(-ground_width, ground_y, gz0)
@@ -399,6 +408,7 @@ class InfiniteTrack:
 
                     else:
                         model.draw_at(ox, oy, oz, use_proxy=False)
+                        
             else:
                 glColor3f(0.85, 0.15, 0.15)
                 for ox, oy, oz, dist in items:
@@ -444,10 +454,10 @@ class CarGLB:
     def handle_input(self, events):
         for e in events:
             if e.type == KEYDOWN:
-                if e.key == K_d:
+                if e.key == K_a:
                     self.target_lane = min(1, self.target_lane + 1)
 
-                elif e.key == K_a:
+                elif e.key == K_d:
                     self.target_lane = max(-1, self.target_lane - 1)
 
     def check_collision(self):
@@ -562,6 +572,7 @@ def load_background_layers(file_list):
             print(f"[warn] background file not found: {path}")
             texid = None
             tw, th = 1, 1
+            
         else:
             surf = pygame.image.load(path).convert_alpha()
             surf = pygame.transform.rotate(surf, -90)
@@ -570,19 +581,15 @@ def load_background_layers(file_list):
             
         base_speed = 0.012
         speed_multiplier = base_speed * (1.0 + (i / max(1, n - 1)) * 3.0)
-
-        """
-        2.1. 아래 명시된 5개의 쌍으로 dictionary를 만들어보기
-            "path" - path
-            "tex" - texid
-            "width" - float(tw)
-            "height" - float(th)
-            "speed" - float(speed_multiplier)
-            "index" - i
-        2.2. 2.1번에서 생성한 dictionary를 layers라는 list에 추가하기
-        """
-        # (2.1번 문제)
-        # (2.2번 문제)
+        
+        layers.append({
+            "path": path,
+            "tex": texid,
+            "width": float(tw),
+            "height": float(th),
+            "speed": float(speed_multiplier),
+            "index": i
+        })
         
     return layers
 
@@ -594,7 +601,7 @@ def draw_background_panels(layers, car_pos):
     glEnable(GL_TEXTURE_2D)
     glDepthMask(GL_FALSE)
 
-    base_lane_half_width = 4.0
+    base_lane_half_width = 5.0
     layer_gap = 2.5
     panel_height = 30.0
     panel_length = 40.0
@@ -651,18 +658,214 @@ def draw_background_panels(layers, car_pos):
     glEnable(GL_CULL_FACE)
     glPopAttrib()
 
+def draw_sky_box_front_top(car_pos):
+    sky_size = 200.0
+    sky_height = 120.0
 
-def main():
-    """
-    3.1. 25번 줄에 선언된 SCORE함수에 접근하기 
-    """
-    """ local 변수와 global 변수"""
+    cx, cy, cz = car_pos
+
+    r, g, b = 144/255.0, 211/255.0, 1.0
+
+    glPushAttrib(GL_ENABLE_BIT | GL_DEPTH_BUFFER_BIT | GL_CURRENT_BIT)
+
+    glDisable(GL_TEXTURE_2D)
+    glDisable(GL_LIGHTING)
+    glDepthMask(GL_FALSE)
+    glDisable(GL_CULL_FACE)
+
+    glColor3f(r, g, b)
+
+    glPushMatrix()
+    glTranslatef(cx, 0.0, cz)
+
+    glBegin(GL_QUADS)
+
+    glVertex3f(-sky_size, 0.0,  sky_size)
+    glVertex3f( sky_size, 0.0,  sky_size)
+    glVertex3f( sky_size, sky_height, sky_size)
+    glVertex3f(-sky_size, sky_height, sky_size)
+
+    glVertex3f(-sky_size, sky_height, -sky_size)
+    glVertex3f( sky_size, sky_height, -sky_size)
+    glVertex3f( sky_size, sky_height,  sky_size)
+    glVertex3f(-sky_size, sky_height,  sky_size)
+
+    glEnd()
+
+    glPopMatrix()
+
+    glDepthMask(GL_TRUE)
+    glEnable(GL_CULL_FACE)
+
+    glPopAttrib()
+
+def countdown(car, track, bg_layers):
+    countdown_max_size = 120
+    countdown_min_size = 40
+    countdown_clock = pygame.time.Clock()
+    countdown_duration = 1000  # ms
+
+    for count in range(5, 0, -1):
+        start_time = pygame.time.get_ticks()
+
+        while True:
+            now = pygame.time.get_ticks()
+            elapsed = now - start_time
+            if elapsed >= countdown_duration:
+                break
+
+            countdown_clock.tick(60)
+
+            for ev in pygame.event.get():
+                if ev.type == QUIT:
+                    pygame.quit()
+                    return
+                if ev.type == KEYDOWN and ev.key == K_ESCAPE:
+                    pygame.quit()
+                    return
+
+            t = elapsed / countdown_duration
+
+            font_size = int(
+                countdown_max_size * (1.0 - t) +
+                countdown_min_size * t
+            )
+
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+            glLoadIdentity()
+
+            cam_distance = 8.0
+            cam_height = 4.0
+            cam_pos = car.pos + np.array([0.0, cam_height, -cam_distance], dtype=np.float32)
+            target_pos = car.pos + np.array([0.0, 0.5, 3.0], dtype=np.float32)
+
+            gluLookAt(
+                cam_pos[0], cam_pos[1], cam_pos[2],
+                target_pos[0], target_pos[1], target_pos[2],
+                0.0, 1.0, 0.0
+            )
+
+            draw_sky_box_front_top(car.pos)
+            draw_background_panels(bg_layers, car.pos)
+            
+            track.draw(car.pos[2])
+            car.draw()
+
+            text = str(count)
+            font = pygame.font.SysFont("Arial", font_size, bold=True)
+            surf = font.render(text, True, (255, 255, 255))
+            w, h = surf.get_size()
+
+            draw_text_gl(
+                text,
+                (WINDOW_SIZE[0] - w) // 2,
+                (WINDOW_SIZE[1] - h) // 2,
+                size=font_size,
+                color=(255, 255, 255)
+            )
+
+            pygame.display.flip()
+
+
+def draw_image_2d(tex, x, y, w, h):
+    glEnable(GL_TEXTURE_2D)
+    glBindTexture(GL_TEXTURE_2D, tex)
+
+    glBegin(GL_QUADS)
+    glTexCoord2f(0, 1); glVertex2f(x,     y)
+    glTexCoord2f(1, 1); glVertex2f(x + w, y)
+    glTexCoord2f(1, 0); glVertex2f(x + w, y + h)
+    glTexCoord2f(0, 0); glVertex2f(x,     y + h)
+    glEnd()
+
+    glBindTexture(GL_TEXTURE_2D, 0)
+    glDisable(GL_TEXTURE_2D)
+
+
+def title_scene():
+    clock = pygame.time.Clock()
+
+    def load_ui_texture(path):
+        surf = pygame.image.load(path).convert_alpha()
+        surf = pygame.transform.flip(surf, False, True)  # ★ 중요
+        return load_texture_from_surface(surf)
+
+    bg_tex = load_ui_texture(TITLE_BG_PATH)
+
+    start_on  = load_ui_texture(UI_DICT['start_button_on'])
+    start_off = load_ui_texture(UI_DICT['start_button_off'])
+    quit_on   = load_ui_texture(UI_DICT['quit_button_on'])
+    quit_off  = load_ui_texture(UI_DICT['quit_button_off'])
+
+    btn_w, btn_h = 200, 70
+
+    start_rect = pygame.Rect(
+        (WINDOW_SIZE[0] - btn_w) // 2,
+        WINDOW_SIZE[1] // 2 - 50,
+        btn_w, btn_h
+    )
+
+    quit_rect = pygame.Rect(
+        (WINDOW_SIZE[0] - btn_w) // 2,
+        WINDOW_SIZE[1] // 2 + 40,
+        btn_w, btn_h
+    )
+
+    while True:
+        clock.tick(60)
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_click = False
+
+        for ev in pygame.event.get():
+            if ev.type == QUIT:
+                pygame.quit()
+                return False
+            if ev.type == KEYDOWN and ev.key == K_ESCAPE:
+                pygame.quit()
+                return False
+            if ev.type == MOUSEBUTTONDOWN and ev.button == 1:
+                mouse_click = True
+
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        glOrtho(0, WINDOW_SIZE[0], WINDOW_SIZE[1], 0, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+
+        glDisable(GL_DEPTH_TEST)
+
+        draw_image_2d(bg_tex, 0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1])
+
+        if start_rect.collidepoint(mouse_pos):
+            draw_image_2d(start_off, *start_rect)
+            if mouse_click:
+                glEnable(GL_DEPTH_TEST)
+                return True
+            
+        else:
+            draw_image_2d(start_on, *start_rect)
+
+        if quit_rect.collidepoint(mouse_pos):
+            draw_image_2d(quit_off, *quit_rect)
+            if mouse_click:
+                pygame.quit()
+                return False
+            
+        else:
+            draw_image_2d(quit_on, *quit_rect)
+
+        pygame.display.flip()
+
+
+def main_scene():
     global SCORE
 
     pygame.init()
     pygame.font.init()
     pygame.display.set_mode(WINDOW_SIZE, DOUBLEBUF | OPENGL)
-    pygame.display.set_caption("Debug Viewer - Side Panels Corrected")
+    pygame.display.set_caption("휴몬랩코딩 3주차")
 
     glEnable(GL_DEPTH_TEST)
     glEnable(GL_CULL_FACE)
@@ -693,6 +896,9 @@ def main():
     except Exception as e:
         print("[error] failed to load car model:", e)
         return
+
+    countdown(car, track, bg_layers)
+
 
     last_z_for_score = car.pos[2]
     clock = pygame.time.Clock()
@@ -725,7 +931,8 @@ def main():
         gluLookAt(cam_pos[0], cam_pos[1], cam_pos[2],
                   target_pos[0], target_pos[1], target_pos[2],
                   0.0, 1.0, 0.0)
-
+        
+        draw_sky_box_front_top(car.pos)
         draw_background_panels(bg_layers, car.pos)
 
         track.draw(car.pos[2])
@@ -738,4 +945,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    pygame.init()
+    pygame.font.init()
+    pygame.display.set_mode(WINDOW_SIZE, DOUBLEBUF | OPENGL)
+
+    if title_scene():
+        main_scene()

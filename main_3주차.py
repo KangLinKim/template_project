@@ -29,12 +29,29 @@ SCORE = 0
 
 TITLE_BG_PATH = os.path.join(CURRENT_FILE, r"files/images/title.jpg")
 
-UI_DICT = {
-    "quit_button_on"  : os.path.join(CURRENT_FILE, r'files/UI/quit_button_on.png'),
-    "quit_button_off" : os.path.join(CURRENT_FILE, r'files/UI/quit_button_off.png'),
-    "start_button_on" : os.path.join(CURRENT_FILE, r'files/UI/start_button_on.png'),
-    "start_button_off": os.path.join(CURRENT_FILE, r'files/UI/start_button_off.png'),
-}
+
+"""
+요구사항
+1.1. UI_DICT라는 dictionary를 초기화하고, 동시에 아래의 요소들을 넣어주세요.
+"quit_button_on"   -  os.path.join(CURRENT_FILE, r'files/UI/quit_button_on.png')
+"quit_button_off"  -  os.path.join(CURRENT_FILE, r'files/UI/quit_button_off.png')
+"start_button_on"  -  os.path.join(CURRENT_FILE, r'files/UI/start_button_on.png')
+"start_button_off" -  os.path.join(CURRENT_FILE, r'files/UI/start_button_off.png')
+
+1.2. UI_DICT라는 빈 dictionary를 만들고, 위의 key-value값을 하나씩 넣어주세요.
+
+2.1. getSCORE라는 이름의 함수를 만들고, 현재 SCORE를 반환하도록 작성해주세요.
+2.2. getSCORE라는 이름의 함수에서, SCORE가 100 이상이면 True를, 아니면 False를 반환하도록 작성해주세요.
+2.3. getVertex라는 이름의 함수를 만들고, 아래의 요구사항을 따라주세요.
+    - hs라는 인자를 input인자로 받도록 해주세요.
+    - 2차원 list를 생성해주세요.
+    - 1차원 list는 3개의 요소를 가지며, hs / -hs 2가지 상태를 가질 수 있습니다.
+        [ hs, -hs, -hs]
+        [-hs,  hs,  hs]
+        가능한 모든 상태를 생성해주세요.
+        
+    - 2차원 list에 1차원 list를 넣어주세요.
+"""
 
 OBSTACLE_DICT = {
     "cone": os.path.join(CURRENT_FILE, r'files/source/obstacle_cone.glb'),
@@ -242,8 +259,14 @@ def load_glb_model(path):
 def draw_cube_wire(size=0.5):
     hs = size / 2.0
     v = [
-        [-hs,-hs,-hs],[ hs,-hs,-hs],[ hs, hs,-hs],[-hs, hs,-hs],
-        [-hs,-hs, hs],[ hs,-hs, hs],[ hs, hs, hs],[-hs, hs, hs]
+        [-hs,-hs,-hs],
+        [ hs,-hs,-hs],
+        [ hs, hs,-hs],
+        [-hs, hs,-hs],
+        [-hs,-hs, hs],
+        [ hs,-hs, hs],
+        [ hs, hs, hs],
+        [-hs, hs, hs]
     ]
 
     edges = [
@@ -370,6 +393,7 @@ class InfiniteTrack:
                 glVertex3f(x + self.lane_width * 0.5, 0.0, z + step)
                 glVertex3f(x - self.lane_width * 0.5, 0.0, z + step)
                 glEnd()
+                
             z += step
 
         groups = {}
