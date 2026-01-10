@@ -10,27 +10,6 @@ from codes.constants import *
 
 
 
-"""
-요구사항
-1.1. MAX_SPEED라는 변수를 만들고, 50~100 사이의 원하는 수를 할당하세요.
-
-2.1. CAR_DICT라는 딕셔너리를 만들고, 이 딕셔너리에 아래와 같은 key-value쌍을 입력하세요
-    "base" - "police_car"
-    "100point" - "truck"
-    "300point" - "rocket"
-2.2. 2.1에서 생성한 딕셔너리에 key로 "500point", value로 원하는 자동차를 넣어주세요.
-
-3.1. 빈 list를 만들고, 여기에 1부터 10까지 순서대로 넣고 출력하세요.
-3.2. 3.1에서 생성한 list에 20이라는 숫자를 추가하세요.
-3.3. 3.1에서 생성한 list에 2라는 숫자를 제거하세요.
-
-4.1. robotics라는 함수를 만들고, 이 함수가 항상 True를 반환하도록 작성해주세요.
-4.2. 4.1에서 생성한 함수에 x를 인자로 넣을 수 있게 수정하고,
-    x에 항상 3을 곱한 수를 반환하도록 수정하세요.
-4.3. 4.2에서 수정한 함수에서 x가 짝수라면 True, 홀수라면 False를 반환하도록 작성해주세요.
-"""
-
-
 class WorldObject:
     def __init__(self, x, y, z):
         self.pos = np.array([x, y, z], dtype=np.float32)
@@ -45,12 +24,58 @@ class WorldObject:
     def is_harmful(self):
         return False
 
+    def update(self, dt):
+        pass
+
+class BulletObject(WorldObject):
+    def __init__(self, x, y, z, speed=50.0, owner=None):
+        super().__init__(x, y, z)
+        self.speed = speed
+        self.type = OBJ_BULLET
+        self.owner = owner
+
+    def update(self, dt):
+        self.pos[2] += self.speed * dt
+
+    def draw(self, camera_z):
+        if not self.active:
+            return
+        glPushMatrix()
+        glTranslatef(self.pos[0], self.pos[1], self.pos[2])
+        glColor3f(0.2, 0.4, 1.0)
+        draw_cube_wire(0.2)
+        glPopMatrix()
+
+class ParticleObject(WorldObject):
+    def __init__(self, x, y, z, vx, vy, vz, lifetime=1.0, size=0.3):
+        super().__init__(x, y, z)
+        self.vel = np.array([vx, vy, vz], dtype=np.float32)
+        self.lifetime = lifetime
+        self.size = size
+        self.type = None  # not collidable
+
+    def update(self, dt):
+        self.pos += self.vel * dt
+        self.lifetime -= dt
+        if self.lifetime <= 0:
+            self.active = False
+
+    def draw(self, camera_z):
+        if not self.active:
+            return
+        glPushMatrix()
+        glTranslatef(self.pos[0], self.pos[1], self.pos[2])
+        glColor3f(0.8, 0.8, 0.8)
+        draw_cube_wire(self.size)
+        glPopMatrix()
+
 class ObstacleObject(WorldObject):
     def __init__(self, x, y, z, model):
         super().__init__(x, y, z)
         self.model = model
         self.radius = model.bounding_radius if model else 0.6
         self.type = OBJ_OBSTACLE
+        self.destroyed_by = set()
 
     def draw(self, camera_z):
         if not self.active:
@@ -91,6 +116,8 @@ class ItemObject(WorldObject):
 
         if not model:
             return
+
+        dist = abs(self.pos[2] - camera_z)
 
         if self.type == OBJ_BULLET:
             glColor3f(0.2, 0.4, 1.0)
@@ -200,6 +227,8 @@ class InfiniteTrack:
         self.seg_len = seg_len
         self.visible_len = TRACK_VISIBLE_AHEAD
         self.segments = []
+        self.particles = []
+        self.bullets = []
         self.init_segments()
 
     def init_segments(self):
@@ -236,13 +265,13 @@ class InfiniteTrack:
             "objects": objects
         })
 
-    def update(self, car_pos):
+    def update(self, min_z, max_z):
         while self.segments and \
-              self.segments[0]["z"] + self.seg_len < car_pos[2] - TRACK_VISIBLE_BEHIND:
+              self.segments[0]["z"] + self.seg_len < min_z:
             self.segments.pop(0)
 
         while self.segments and \
-              self.segments[-1]["z"] < car_pos[2] + self.visible_len:
+              self.segments[-1]["z"] < max_z:
             last_z = self.segments[-1]["z"]
             self.add_segment(last_z + self.seg_len)
 
@@ -325,6 +354,12 @@ class InfiniteTrack:
                     draw_cube_wire(0.6)
                     glPopMatrix()
 
+        for p in self.particles:
+            p.draw(camera_z)
+
+        for b in self.bullets:
+            b.draw(camera_z)
+
     # def draw(self, camera_z):
     #     for seg in self.segments:
     #         for obj in seg["objects"]:
@@ -332,7 +367,7 @@ class InfiniteTrack:
 
 
 class CarGLB:
-    def __init__(self, track, path):
+    def __init__(self, track, path, control_map=None):
         self.track = track
         self.pos = np.array([0.0, 0.25, 0.0], dtype=np.float32)
         self.speed = 8.0
@@ -343,6 +378,20 @@ class CarGLB:
         self.collision_frames = 0
         self.ammo = 0
         self.shoot_cooldown = 0.0
+        self.score = 0  # add score per car
+        self.id = None  # will be set later
+        # control_map: dict with keys 'lane_left','lane_right','accel','brake','shoot'
+        # where values are pygame key constants or 'mouse' for mouse button shooting
+        if control_map is None:
+            self.control_map = {
+                'lane_left': K_a,
+                'lane_right': K_d,
+                'accel': K_w,
+                'brake': K_s,
+                'shoot': 'mouse'
+            }
+        else:
+            self.control_map = control_map
 
         v, uv, idx, tex, md = load_glb_model(path)
         self.vertices = v
@@ -368,11 +417,20 @@ class CarGLB:
 
     def handle_input(self, events):
         for e in events:
+            # allow special raw input dicts from network layer
+            if isinstance(e, dict) and e.get('_raw_input'):
+                raw = e.get('raw') or {}
+                if raw.get('lane_left_press'):
+                    self.target_lane = min(1, self.target_lane + 1)
+                if raw.get('lane_right_press'):
+                    self.target_lane = max(-1, self.target_lane - 1)
+                continue
+
             if e.type == KEYDOWN:
-                if e.key == K_a:
+                if e.key == self.control_map.get('lane_left'):
                     self.target_lane = min(1, self.target_lane + 1)
 
-                elif e.key == K_d:
+                elif e.key == self.control_map.get('lane_right'):
                     self.target_lane = max(-1, self.target_lane - 1)
 
     def check_collision(self):
@@ -382,6 +440,8 @@ class CarGLB:
         for seg in self.track.segments:
             for obj in seg["objects"]:
                 if not obj.active:
+                    continue
+                if hasattr(obj, 'destroyed_by') and self.id in obj.destroyed_by:
                     continue
 
                 dz = abs(self.pos[2] - obj.pos[2])
@@ -393,8 +453,6 @@ class CarGLB:
         return None
 
     def on_collision(self, obj):
-        global SCORE
-
         ox, oy, oz = obj.pos
         obj.active = False
         self.pushback_vel = -12.0
@@ -410,7 +468,7 @@ class CarGLB:
         self.invuln = 1.0
         self.collision_frames = 0
 
-        SCORE -= 10
+        self.score -= 10
 
     def handle_collision(self, obj):
         if obj.type == OBJ_OBSTACLE:
@@ -423,6 +481,8 @@ class CarGLB:
             self.on_collision_bullet(obj)
 
     def update(self, dt, keys, events):
+        # `raw_input` can be provided via events as a dict under a special key
+        # but most callers will pass through normal events/keys.
         self.handle_input(events)
 
         if self.invuln > 0.0:
@@ -430,20 +490,57 @@ class CarGLB:
 
         self.shoot_cooldown = max(0, self.shoot_cooldown - dt)
 
+        # shooting input (mouse or key)
         for e in events:
-            if e.type == MOUSEBUTTONDOWN and e.button == 1:
-                self.try_shoot()
+            if isinstance(e, dict) and e.get('_raw_input'):
+                # raw input dict provided by network layer
+                raw = e.get('raw') or {}
+                if raw.get('shoot_press'):
+                    self.try_shoot()
+                # lane presses
+                if raw.get('lane_left_press'):
+                    self.target_lane = min(1, self.target_lane + 1)
+                if raw.get('lane_right_press'):
+                    self.target_lane = max(-1, self.target_lane - 1)
+                # accel/brake handled below via keys emulation
+            else:
+                if self.control_map.get('shoot') == 'mouse':
+                    if e.type == MOUSEBUTTONDOWN and e.button == 1:
+                        self.try_shoot()
+                else:
+                    if e.type == KEYDOWN and e.key == self.control_map.get('shoot'):
+                        self.try_shoot()
 
         tx = self.target_lane * self.track.lane_width
         self.pos[0] += (tx - self.pos[0]) * min(1.0, 8.0 * dt)
 
-        if keys[K_w]:
-            self.speed += 6.0 * dt
-        else:
-            self.speed *= (1.0 - min(0.5 * dt, 0.5))
+        accel_key = self.control_map.get('accel', K_w)
+        brake_key = self.control_map.get('brake', K_s)
 
-        if keys[K_s]:
-            self.speed = max(0.0, self.speed - 10.0 * dt)
+        # allow callers to provide a `keys`-like mapping or a raw_input dict via events
+        raw_input = None
+        for e in events:
+            if isinstance(e, dict) and e.get('_raw_input'):
+                raw_input = e.get('raw') or {}
+                break
+
+        if raw_input is not None:
+            if raw_input.get('accel'):
+                self.speed += 6.0 * dt
+            else:
+                self.speed *= (1.0 - min(0.5 * dt, 0.5))
+
+            if raw_input.get('brake'):
+                self.speed = max(0.0, self.speed - 10.0 * dt)
+
+        else:
+            if keys[accel_key]:
+                self.speed += 6.0 * dt
+            else:
+                self.speed *= (1.0 - min(0.5 * dt, 0.5))
+
+            if keys[brake_key]:
+                self.speed = max(0.0, self.speed - 10.0 * dt)
 
         self.speed = min(self.speed, MAX_SPEED)
 
@@ -469,12 +566,9 @@ class CarGLB:
         self.ammo -= 1
         self.shoot_cooldown = 0.25
 
-        hit = self.find_front_obstacle()
-        if hit:
-            hit.active = False
-            
-            global DESTROY_SCORE
-            DESTROY_SCORE += 50
+        # create bullet
+        bullet = BulletObject(self.pos[0], self.pos[1], self.pos[2] + 1.0, owner=self.id)
+        self.track.bullets.append(bullet)
 
     def find_front_obstacle(self):
         max_dist = 50.0
@@ -498,7 +592,8 @@ class CarGLB:
     def on_collision_obstacle(self, obj):
         global SCORE
 
-        obj.active = False
+        if hasattr(obj, 'destroyed_by'):
+            obj.destroyed_by.add(self.id)
 
         self.pushback_vel = -12.0
         self.pushback_timer = 0.4
@@ -511,10 +606,9 @@ class CarGLB:
         self.speed = max(2.0, self.speed * 0.3)
 
         self.invuln = 1.0
-        SCORE -= 10
+        self.score -= 10
 
     def on_collision_booster(self, obj):
-        global SCORE
 
         obj.active = False
 
@@ -522,7 +616,7 @@ class CarGLB:
         self.pos[2] += 1.2
         self.invuln = 0.2
 
-        SCORE += 5
+        self.score += 5
 
     def on_collision_bullet(self, obj):
         # global SCORE
@@ -628,20 +722,22 @@ def draw_background_panels(layers, car_pos):
     glEnable(GL_CULL_FACE)
     glPopAttrib()
 
-def draw_bullet_ui(car):
+def draw_bullet_ui(car, viewport_size=None):
     if not bullet_ui_tex or car.ammo <= 0:
         return
+
+    vw, vh = viewport_size if viewport_size is not None else WINDOW_SIZE
 
     icon_size = 32
     padding = 8
     total_w = car.ammo * (icon_size + padding)
-    start_x = WINDOW_SIZE[0] - total_w - 20
+    start_x = vw - total_w - 20
     y = 20
 
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
     glLoadIdentity()
-    glOrtho(0, WINDOW_SIZE[0], WINDOW_SIZE[1], 0, -1, 1)
+    glOrtho(0, vw, vh, 0, -1, 1)
 
     glMatrixMode(GL_MODELVIEW)
     glPushMatrix()
@@ -874,18 +970,12 @@ def title_scene():
 
 
 def main_scene():
-    global SCORE, DESTROY_SCORE
-    
-    if "base" not in CAR_DICT:
-        raise "2.1번 문제를 다 풀지 않았습니다."
-    
-    if not hasattr(__builtins__, "robotics"):
-        raise "4번 문제까지 해결하지 않았습니다."
-
     pygame.init()
     pygame.font.init()
     pygame.display.set_mode(WINDOW_SIZE, DOUBLEBUF | OPENGL)
     pygame.display.set_caption(PROJECT_NAME)
+
+    random.seed(12345)  # Fixed seed for consistent obstacle generation
 
     global item_models
     # print(ITEM_MODELS)
@@ -933,53 +1023,353 @@ def main_scene():
         print("[error] failed to load car model:", e)
         return
 
+    # network auto-connect (fixed port 50007): try to connect as client first;
+    # if connection fails, become host and start the server.
+    network_mode = False
+    is_host = False
+    server = None
+    client = None
+    SERVER_PORT = 50007
+    SERVER_HOST = '127.0.0.1'
+
+    # attempt to connect as client
+    try:
+        from net_client import GameClient
+        client = GameClient()
+        client.connect(SERVER_HOST, SERVER_PORT)
+        network_mode = True
+        is_host = False
+        print(f"[net] connected to {SERVER_HOST}:{SERVER_PORT} as client")
+    except Exception:
+        # failed to connect -> start host server
+        try:
+            from net_server import GameServer
+            server = GameServer(host='0.0.0.0', port=SERVER_PORT)
+            server.start()
+            network_mode = True
+            is_host = True
+            print(f"[net] started host server on port {SERVER_PORT}")
+        except Exception as e:
+            print('[net] failed to start server, running local split-screen:', e)
+            network_mode = False
+            is_host = False
+            client = None
+            server = None
+
     countdown(car, track, bg_layers)
 
+    # network: create second car as remote player placeholder
+    car2 = CarGLB(track, MODEL_PATH)
+    car2.pos[2] = car.pos[2] - 5.0
+
+    if network_mode:
+        if is_host:
+            car.id = 'car1'
+            car2.id = 'car2'
+        else:
+            car.id = 'car2'
+            car2.id = 'car1'
+    else:
+        car.id = 'car1'
+        car2.id = 'car2'
 
     last_z_for_score = car.pos[2]
+    last_z_for_score2 = car2.pos[2]
+
     clock = pygame.time.Clock()
 
-    while True:
-        dt = clock.tick(60) / 1000.0
-        events = pygame.event.get()
-        keys = pygame.key.get_pressed()
+    try:
+        while True:
+            dt = clock.tick(60) / 1000.0
+            events = pygame.event.get()
+            keys = pygame.key.get_pressed()
 
-        for ev in events:
-            if ev.type == QUIT:
-                pygame.quit(); return
-            if ev.type == KEYDOWN and ev.key == K_ESCAPE:
-                pygame.quit(); return
+            for ev in events:
+                if ev.type == QUIT:
+                    raise SystemExit()
+                if ev.type == KEYDOWN and ev.key == K_ESCAPE:
+                    raise SystemExit()
 
-        if car.pos[2] > last_z_for_score + 5.0:
-            SCORE += 1
-            last_z_for_score = car.pos[2]
+            if network_mode and is_host:
+                # host authoritative simulation: read client input and apply to car2
+                client_input = server.get_client_input() or {}
+                # convert client_input dict to a special raw event for car2.update
+                raw_ev = {'_raw_input': True, 'raw': client_input}
 
-        car.update(dt, keys, events)
-        track.update(car.pos)
+                car.update(dt, keys, events)
+                car2.update(dt, keys, [raw_ev])
 
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glLoadIdentity()
+                # add score for distance traveled
+                if car.pos[2] > last_z_for_score + 5.0:
+                    car.score += 1
+                    last_z_for_score = car.pos[2]
+                if car2.pos[2] > last_z_for_score2 + 5.0:
+                    car2.score += 1
+                    last_z_for_score2 = car2.pos[2]
 
-        cam_distance = 8.0
-        cam_height = 4.0
-        cam_pos = car.pos + np.array([0.0, cam_height, -cam_distance], dtype=np.float32)
-        target_pos = car.pos + np.array([0.0, 0.5, 3.0], dtype=np.float32)
-        gluLookAt(cam_pos[0], cam_pos[1], cam_pos[2],
-                  target_pos[0], target_pos[1], target_pos[2],
-                  0.0, 1.0, 0.0)
-        
-        draw_sky_box_front_top(car.pos)
-        draw_background_panels(bg_layers, car.pos)
+                # update track using lead player
+                min_z = min(car.pos[2], car2.pos[2]) - TRACK_VISIBLE_BEHIND
+                max_z = max(car.pos[2], car2.pos[2]) + TRACK_VISIBLE_AHEAD
+                track.update(min_z, max_z)
 
-        track.draw(car.pos[2])
-        car.draw()
+                # update bullets and particles
+                track.bullets[:] = [b for b in track.bullets if b.active]
+                for b in track.bullets:
+                    b.update(dt)
+                track.particles[:] = [p for p in track.particles if p.active]
+                for p in track.particles:
+                    p.update(dt)
 
-        draw_bullet_ui(car)
-        draw_text_gl(f"Speed: {car.speed:.1f}", 20, 24, size=24, color=(255, 255, 255))
-        draw_text_gl(f"Score: {SCORE}", 20, 56, size=24, color=(255, 230, 0))
-        draw_text_gl(f"+ {DESTROY_SCORE}", 100 + len(str(SCORE+1)) * 20, 56, size=24, color=(255, 140, 0))
+                # check bullet collisions
+                for b in track.bullets:
+                    if not b.active:
+                        continue
+                    for seg in track.segments:
+                        for obj in seg["objects"]:
+                            if not obj.active or obj.type != OBJ_OBSTACLE:
+                                continue
+                            dz = abs(b.pos[2] - obj.pos[2])
+                            dx = abs(b.pos[0] - obj.pos[0])
+                            if dz < 0.6 and dx < 0.6:
+                                if hasattr(obj, 'destroyed_by'):
+                                    obj.destroyed_by.add(b.owner)
+                                b.active = False
+                                # create particles
+                                for _ in range(5):
+                                    vx = random.uniform(-10, 10)
+                                    vy = random.uniform(-10, 10)
+                                    vz = random.uniform(-10, 10)
+                                    p = ParticleObject(obj.pos[0], obj.pos[1], obj.pos[2], vx, vy, vz)
+                                    track.particles.append(p)
+                                # score
+                                car.score += 50
+                                car2.score += 50
+                                break
+                        if not b.active:
+                            break
 
-        pygame.display.flip()
+                # send authoritative state to client
+                state = {
+                    'car1': {'pos': car.pos.tolist(), 'speed': float(car.speed), 'ammo': int(car.ammo), 'score': int(car.score)},
+                    'car2': {'pos': car2.pos.tolist(), 'speed': float(car2.speed), 'ammo': int(car2.ammo), 'score': int(car2.score)}
+                }
+                server.send_state(state)
+
+                # render local host view (full screen)
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+                glLoadIdentity()
+                cam_distance = 8.0
+                cam_height = 4.0
+                cam_pos = car.pos + np.array([0.0, cam_height, -cam_distance], dtype=np.float32)
+                target_pos = car.pos + np.array([0.0, 0.5, 3.0], dtype=np.float32)
+                gluLookAt(cam_pos[0], cam_pos[1], cam_pos[2],
+                          target_pos[0], target_pos[1], target_pos[2],
+                          0.0, 1.0, 0.0)
+
+                draw_sky_box_front_top(car.pos)
+                draw_background_panels(bg_layers, car.pos)
+                track.draw(car.pos[2])
+                car.draw()
+                # also draw remote car so host sees opponent
+                car2.draw()
+
+                # draw distance difference next to cars
+                dist_diff = int(car2.pos[2] - car.pos[2])
+                sign = "+" if dist_diff > 0 else ""
+                draw_text_gl(f"Distance: {sign}{dist_diff}m", WINDOW_SIZE[0] // 2 - 100, WINDOW_SIZE[1] - 50, size=20, color=(255, 255, 255))
+
+                draw_bullet_ui(car)
+                draw_text_gl(f"Speed: {car.speed:.1f}", 20, 24, size=24, color=(255, 255, 255))
+                draw_text_gl(f"Score: {car.score}", 20, 56, size=24, color=(255, 230, 0))
+                # show opponent score
+                draw_text_gl(f"Opponent: {car2.score}", 20, 100, size=24, color=(255, 140, 0))
+
+                pygame.display.flip()
+
+            elif network_mode and not is_host:
+                # client: send local inputs to server and render remote-updated state
+                # build simplified input dict for client (player2 inputs)
+                input_dict = {
+                    'lane_left_press': False,
+                    'lane_right_press': False,
+                    'accel': False,
+                    'brake': False,
+                    'shoot_press': False
+                }
+                for e in events:
+                    if e.type == KEYDOWN:
+                        if e.key == K_LEFT:
+                            input_dict['lane_left_press'] = True
+                        if e.key == K_RIGHT:
+                            input_dict['lane_right_press'] = True
+                        if e.key == K_RETURN:
+                            input_dict['shoot_press'] = True
+                # continuous keys
+                if keys[K_UP]:
+                    input_dict['accel'] = True
+                if keys[K_DOWN]:
+                    input_dict['brake'] = True
+
+                client.send_input(input_dict)
+
+                # receive latest authoritative state
+                state = client.get_state()
+                if state:
+                    s1 = state.get('car1')
+                    s2 = state.get('car2')
+                    if s2:
+                        # client should update its local representation: show car2 as local player
+                        car2.pos = np.array(s2.get('pos', car2.pos), dtype=np.float32)
+                        car2.speed = float(s2.get('speed', car2.speed))
+                        car2.ammo = int(s2.get('ammo', car2.ammo))
+                        car2.score = int(s2.get('score', car2.score))
+                    if s1:
+                        car.pos = np.array(s1.get('pos', car.pos), dtype=np.float32)
+                        car.speed = float(s1.get('speed', car.speed))
+                        car.ammo = int(s1.get('ammo', getattr(car, 'ammo', 0)))
+                        car.score = int(s1.get('score', car.score))
+
+                # update track
+                min_z = min(car.pos[2], car2.pos[2]) - TRACK_VISIBLE_BEHIND
+                max_z = max(car.pos[2], car2.pos[2]) + TRACK_VISIBLE_AHEAD
+                track.update(min_z, max_z)
+
+                # update bullets and particles (no collision check on client)
+                track.bullets[:] = [b for b in track.bullets if b.active]
+                for b in track.bullets:
+                    b.update(dt)
+                track.particles[:] = [p for p in track.particles if p.active]
+                for p in track.particles:
+                    p.update(dt)
+
+                # render client view following local (car2)
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+                glLoadIdentity()
+                cam_distance = 8.0
+                cam_height = 4.0
+                cam_pos = car2.pos + np.array([0.0, cam_height, -cam_distance], dtype=np.float32)
+                target_pos = car2.pos + np.array([0.0, 0.5, 3.0], dtype=np.float32)
+                gluLookAt(cam_pos[0], cam_pos[1], cam_pos[2],
+                          target_pos[0], target_pos[1], target_pos[2],
+                          0.0, 1.0, 0.0)
+
+                draw_sky_box_front_top(car2.pos)
+                draw_background_panels(bg_layers, car2.pos)
+                track.draw(car2.pos[2])
+                car2.draw()
+                # draw remote host car
+                car.draw()
+
+                # draw distance difference
+                dist_diff = int(car.pos[2] - car2.pos[2])
+                sign = "+" if dist_diff > 0 else ""
+                draw_text_gl(f"Distance: {sign}{dist_diff}m", WINDOW_SIZE[0] // 2 - 100, WINDOW_SIZE[1] - 50, size=20, color=(255, 255, 255))
+
+                draw_bullet_ui(car2)
+                draw_text_gl(f"Speed: {car2.speed:.1f}", 20, 24, size=24, color=(255, 255, 255))
+                draw_text_gl(f"Score: {car2.score}", 20, 56, size=24, color=(255, 230, 0))
+                # show opponent score at top right
+                draw_text_gl(f"Opponent: {car.score}", 20, 100, size=24, color=(255, 140, 0))
+
+                pygame.display.flip()
+
+            else:
+                # local split-screen fallback (non-networked)
+                if car.pos[2] > car2.pos[2] + 5.0:
+                    pass
+
+                # default behavior: keep previous split-screen implementation
+                car.update(dt, keys, events)
+                car2.update(dt, keys, events)
+                min_z = min(car.pos[2], car2.pos[2]) - TRACK_VISIBLE_BEHIND
+                max_z = max(car.pos[2], car2.pos[2]) + TRACK_VISIBLE_AHEAD
+                track.update(min_z, max_z)
+
+                # update bullets and particles
+                track.bullets[:] = [b for b in track.bullets if b.active]
+                for b in track.bullets:
+                    b.update(dt)
+                track.particles[:] = [p for p in track.particles if p.active]
+                for p in track.particles:
+                    p.update(dt)
+
+                # check bullet collisions
+                for b in track.bullets:
+                    if not b.active:
+                        continue
+                    for seg in track.segments:
+                        for obj in seg["objects"]:
+                            if not obj.active or obj.type != OBJ_OBSTACLE:
+                                continue
+                            dz = abs(b.pos[2] - obj.pos[2])
+                            dx = abs(b.pos[0] - obj.pos[0])
+                            if dz < 0.6 and dx < 0.6:
+                                if hasattr(obj, 'destroyed_by'):
+                                    obj.destroyed_by.add(b.owner)
+                                b.active = False
+                                # create particles
+                                for _ in range(5):
+                                    vx = random.uniform(-10, 10)
+                                    vy = random.uniform(-10, 10)
+                                    vz = random.uniform(-10, 10)
+                                    p = ParticleObject(obj.pos[0], obj.pos[1], obj.pos[2], vx, vy, vz)
+                                    track.particles.append(p)
+                                # score
+                                car.score += 50
+                                car2.score += 50
+                                break
+                        if not b.active:
+                            break
+
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+                glLoadIdentity()
+
+                w, h = WINDOW_SIZE
+                half_w = w // 2
+
+                def render_player_view(player_car, vx, vw):
+                    glViewport(vx, 0, vw, h)
+                    glMatrixMode(GL_PROJECTION)
+                    glLoadIdentity()
+                    gluPerspective(60.0, float(vw) / float(h), 0.01, 2000.0)
+                    glMatrixMode(GL_MODELVIEW)
+                    glLoadIdentity()
+
+                    cam_distance = 8.0
+                    cam_height = 4.0
+                    cam_pos = player_car.pos + np.array([0.0, cam_height, -cam_distance], dtype=np.float32)
+                    target_pos = player_car.pos + np.array([0.0, 0.5, 3.0], dtype=np.float32)
+                    gluLookAt(cam_pos[0], cam_pos[1], cam_pos[2],
+                              target_pos[0], target_pos[1], target_pos[2],
+                              0.0, 1.0, 0.0)
+
+                    draw_sky_box_front_top(player_car.pos)
+                    draw_background_panels(bg_layers, player_car.pos)
+                    track.draw(player_car.pos[2])
+                    player_car.draw()
+
+                    draw_bullet_ui(player_car, viewport_size=(vw, h))
+                    draw_text_gl(f"Speed: {player_car.speed:.1f}", 20, 24, size=20, color=(255,255,255), viewport_size=(vw, h))
+
+                render_player_view(car, 0, half_w)
+                render_player_view(car2, half_w, w-half_w)
+                glViewport(0,0,w,h)
+                pygame.display.flip()
+    except SystemExit:
+        pygame.quit()
+        if server:
+            server.stop()
+        if client:
+            client.stop()
+        return
+    except Exception as e:
+        print('main loop error', e)
+        pygame.quit()
+        if server:
+            server.stop()
+        if client:
+            client.stop()
+        return
 
 
 if __name__ == "__main__":

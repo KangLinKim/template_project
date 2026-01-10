@@ -10,7 +10,12 @@ from pygltflib import GLTF2
 WINDOW_SIZE = (1280, 720)
 
 
-def draw_text_gl(text, x, y, size=20, color=(255, 255, 255)):
+def draw_text_gl(text, x, y, size=20, color=(255, 255, 255), viewport_size=None):
+    """Draw text in screen-space. If `viewport_size` is provided use it for ortho projection
+    (width, height). Otherwise fall back to global WINDOW_SIZE.
+    """
+    vw, vh = viewport_size if viewport_size is not None else WINDOW_SIZE
+
     font = pygame.font.SysFont("Arial", size, bold=True)
     surf = font.render(text, True, color)
     w, h = surf.get_width(), surf.get_height()
@@ -19,7 +24,7 @@ def draw_text_gl(text, x, y, size=20, color=(255, 255, 255)):
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
     glLoadIdentity()
-    glOrtho(0, WINDOW_SIZE[0], WINDOW_SIZE[1], 0, -1, 1)
+    glOrtho(0, vw, vh, 0, -1, 1)
 
     glMatrixMode(GL_MODELVIEW)
     glPushMatrix()
