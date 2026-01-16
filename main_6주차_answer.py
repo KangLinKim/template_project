@@ -2,251 +2,138 @@
 # python -m pip install pygame PyOpenGL PyOpenGL_accelerate pygltflib numpy
 
 
-import os
-import io
 import math
-import numpy as np
-import pygame
-from pygame.locals import *
-from OpenGL.GL import *
-from OpenGL.GLU import *
-from pygltflib import GLTF2
 import random
 
-CURRENT_FILE = os.path.abspath(__file__)
-CURRENT_FILE = os.path.dirname(CURRENT_FILE)
-
-MODEL_PATH = os.path.join(CURRENT_FILE, r"files/source/police_car.glb")
-WINDOW_SIZE = (1280, 720)
-MAX_SPEED = 80.0
-MAX_AMMO = 3
-
-RENDER_DISTANCE = 60.0
-LOD_PROXY_DISTANCE = 30.0
-TRACK_VISIBLE_AHEAD = 80.0
-TRACK_VISIBLE_BEHIND = 20.0
-
-OBJ_OBSTACLE = "obstacle"
-OBJ_BOOSTER  = "booster"
-OBJ_BULLET   = "bullet"
-
-SCORE = 0
-
-TITLE_BG_PATH = os.path.join(CURRENT_FILE, r"files/images/title.jpg")
-
-UI_DICT = {
-    "quit_button_on"  : os.path.join(CURRENT_FILE, r'files/UI/quit_button_on.png'),
-    "quit_button_off" : os.path.join(CURRENT_FILE, r'files/UI/quit_button_off.png'),
-    "start_button_on" : os.path.join(CURRENT_FILE, r'files/UI/start_button_on.png'),
-    "start_button_off": os.path.join(CURRENT_FILE, r'files/UI/start_button_off.png'),
-}
-
-ITEM_DICT = {
-    "bullet": os.path.join(CURRENT_FILE, r'files/images/item_bullet.png')
-}
-
-OBSTACLE_DICT = {
-    "cone": os.path.join(CURRENT_FILE, r'files/source/obstacle_cone.glb'),
-    "broken_glass": os.path.join(CURRENT_FILE, r'files/source/obstacle_broken_glass.glb'),
-    "cylinder": os.path.join(CURRENT_FILE, r'files/source/obstacle_cylinder.glb'),
-}
-
-BACKGROUND_LAYER_FILES = [
-    os.path.join(CURRENT_FILE, r"files/background/Layer_0.png"),
-    os.path.join(CURRENT_FILE, r"files/background/Layer_1.png"),
-    os.path.join(CURRENT_FILE, r"files/background/Layer_2.png"),
-    os.path.join(CURRENT_FILE, r"files/background/Layer_3.png"),
-    os.path.join(CURRENT_FILE, r"files/background/Layer_4.png"),
-]
+from codes.loader import *
+from codes.constants import *
 
 
-def draw_text_gl(text, x, y, size=20, color=(255, 255, 255)):
-    font = pygame.font.SysFont("Arial", size, bold=True)
-    surf = font.render(text, True, color)
-    w, h = surf.get_width(), surf.get_height()
-    raw = pygame.image.tostring(surf, "RGBA", True)
 
-    glMatrixMode(GL_PROJECTION)
-    glPushMatrix()
-    glLoadIdentity()
-    glOrtho(0, WINDOW_SIZE[0], WINDOW_SIZE[1], 0, -1, 1)
+"""
+요구사항
+1.1. MAX_SPEED라는 변수를 만들고, 50~100 사이의 원하는 수를 할당하세요.
 
-    glMatrixMode(GL_MODELVIEW)
-    glPushMatrix()
-    glLoadIdentity()
+2.1. CAR_DICT라는 딕셔너리를 만들고, 이 딕셔너리에 아래와 같은 key-value쌍을 입력하세요
+    "base" - "police_car"
+    "100point" - "truck"
+    "300point" - "rocket"
+2.2. 2.1에서 생성한 딕셔너리에 key로 "500point", value로 원하는 자동차를 넣어주세요.
 
-    glDisable(GL_DEPTH_TEST)
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    glEnable(GL_TEXTURE_2D)
+3.1. 빈 list를 만들고, 여기에 1부터 10까지 순서대로 넣고 출력하세요.
+3.2. 3.1에서 생성한 list에 20이라는 숫자를 추가하세요.
+3.3. 3.1에서 생성한 list에 2라는 숫자를 제거하세요.
 
-    tex = glGenTextures(1)
-    glBindTexture(GL_TEXTURE_2D, tex)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, raw)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-
-    glColor3f(1.0, 1.0, 1.0)
-    glBegin(GL_QUADS)
-    glTexCoord2f(0, 1); glVertex2f(x,     y)
-    glTexCoord2f(1, 1); glVertex2f(x + w, y)
-    glTexCoord2f(1, 0); glVertex2f(x + w, y + h)
-    glTexCoord2f(0, 0); glVertex2f(x,     y + h)
-    glEnd()
-
-    glDeleteTextures([tex])
-    glDisable(GL_TEXTURE_2D)
-    glDisable(GL_BLEND)
-    glEnable(GL_DEPTH_TEST)
-
-    glPopMatrix()
-    glMatrixMode(GL_PROJECTION)
-    glPopMatrix()
-    glMatrixMode(GL_MODELVIEW)
+4.1. robotics라는 함수를 만들고, 이 함수가 항상 True를 반환하도록 작성해주세요.
+4.2. 4.1에서 생성한 함수에 x를 인자로 넣을 수 있게 수정하고,
+    x에 항상 3을 곱한 수를 반환하도록 수정하세요.
+4.3. 4.2에서 수정한 함수에서 x가 짝수라면 True, 홀수라면 False를 반환하도록 작성해주세요.
+"""
 
 
-def read_accessor_array(gltf, accessor_index, blob):
-    if accessor_index is None:
-        return None
-    accessor = gltf.accessors[accessor_index]
-    view = gltf.bufferViews[accessor.bufferView]
-    comp_map = {
-        5120: np.int8, 5121: np.uint8, 5122: np.int16,
-        5123: np.uint16, 5125: np.uint32, 5126: np.float32
-    }
+class WorldObject:
+    def __init__(self, x, y, z):
+        self.pos = np.array([x, y, z], dtype=np.float32)
+        self.active = True
 
-    dtype = comp_map[accessor.componentType]
-    count_map = {"SCALAR":1, "VEC2":2, "VEC3":3, "VEC4":4}
-    comps = count_map[accessor.type]
-    comp_size = np.dtype(dtype).itemsize
-    elem_size = comp_size * comps
-    stride = getattr(view, "byteStride", None) or elem_size
-    base = (getattr(view, "byteOffset", 0) or 0) + (getattr(accessor, "byteOffset", 0) or 0)
-    arr = np.zeros((accessor.count, comps), dtype=dtype)
-    for i in range(accessor.count):
-        start = base + i * stride
-        chunk = blob[start:start + elem_size]
-        if len(chunk) < elem_size:
-            chunk = chunk + b'\x00' * (elem_size - len(chunk))
+    def draw(self, camera_z):
+        pass
 
-        arr[i, :] = np.frombuffer(chunk, dtype=dtype, count=comps)
+    def on_collision(self, car):
+        pass
 
-    return arr
+    def is_harmful(self):
+        return False
 
-def read_indices(gltf, accessor_index, blob):
-    accessor = gltf.accessors[accessor_index]
-    view = gltf.bufferViews[accessor.bufferView]
-    ct = accessor.componentType
-    if ct == 5121:
-        dtype = np.uint8; size = 1
+class ObstacleObject(WorldObject):
+    def __init__(self, x, y, z, model):
+        super().__init__(x, y, z)
+        self.model = model
+        self.radius = model.bounding_radius if model else 0.6
+        self.type = OBJ_OBSTACLE
 
-    elif ct == 5123:
-        dtype = np.uint16; size = 2
+    def draw(self, camera_z):
+        if not self.active:
+            return
 
-    elif ct == 5125:
-        dtype = np.uint32; size = 4
+        dist = abs(self.pos[2] - camera_z)
+        use_proxy = dist > LOD_PROXY_DISTANCE
+        self.model.draw_at(
+            self.pos[0], self.pos[1], self.pos[2],
+            use_proxy=use_proxy
+        )
 
-    else:
-        raise RuntimeError("Unsupported index type")
-    
-    start = (getattr(view, "byteOffset", 0) or 0) + (getattr(accessor, "byteOffset", 0) or 0)
-    buf = blob[start:start + accessor.count * size]
+    def on_collision(self, car):
+        if not self.active:
+            return
+        self.active = False
+        car.on_collision_obstacle(self)
 
-    return np.frombuffer(buf, dtype=dtype).copy()
+    def is_harmful(self):
+        return True
 
-def load_texture_from_surface(surface):
-    surface = pygame.transform.flip(surface, False, True)
-    w, h = surface.get_size()
-    raw = pygame.image.tostring(surface, "RGBA", True)
-    tex = glGenTextures(1)
-    glBindTexture(GL_TEXTURE_2D, tex)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, raw)
-    glBindTexture(GL_TEXTURE_2D, 0)
+global item_models
+item_models = {}
+class ItemObject(WorldObject):
+    def __init__(self, x, y, z):
+        super().__init__(x, y, z)
+        self.active = True
+        self.type = None
 
-    return tex
+    def on_collision(self, car):
+        self.active = False
 
-def load_texture_from_gltf(gltf, image_index, blob, folder):
-    if image_index is None:
-        return None
-    img = gltf.images[image_index]
-    uri = getattr(img, "uri", None)
-    if uri:
-        path = os.path.join(folder, os.path.basename(uri))
-        if os.path.exists(path):
-            surf = pygame.image.load(path).convert_alpha()
-            return load_texture_from_surface(surf)
+    def draw(self, camera_z):
+        if not self.active:
+            return
         
-    if getattr(img, "bufferView", None) is not None:
-        bv = gltf.bufferViews[img.bufferView]
-        start = getattr(bv, "byteOffset", 0)
-        length = getattr(bv, "byteLength", 0)
-        data = blob[start:start + length]
-        try:
-            surf = pygame.image.load(io.BytesIO(data)).convert_alpha()
+        model = item_models.get(self.type)
 
-        except Exception:
-            tmp = f"__tmp_img_{image_index}.png"
-            with open(tmp, "wb") as f:
-                f.write(data)
+        if not model:
+            return
 
-            surf = pygame.image.load(tmp).convert_alpha()
-            os.remove(tmp)
+        if self.type == OBJ_BULLET:
+            glColor3f(0.2, 0.4, 1.0)
+        elif self.type == OBJ_BOOSTER:
+            glColor3f(1.0, 0.9, 0.2)
+        else:
+            glColor3f(1.0, 1.0, 1.0)
 
-        return load_texture_from_surface(surf)
-    
-    return None
+        if model.texture:
+            glEnable(GL_TEXTURE_2D)
+            glBindTexture(GL_TEXTURE_2D, model.texture)
 
-def load_glb_model(path):
-    gltf = GLTF2().load(path)
-    folder = os.path.dirname(path)
-    blob = gltf.binary_blob()
+        model.draw_at(
+            self.pos[0],
+            self.pos[1],
+            self.pos[2],
+            use_proxy=False
+        )
 
-    all_v = []
-    all_uv = []
-    all_idx = []
-    offset = 0
-    texid = None
+        if model.texture:
+            glBindTexture(GL_TEXTURE_2D, 0)
+            glDisable(GL_TEXTURE_2D)
 
-    for mesh in gltf.meshes:
-        for prim in mesh.primitives:
-            pos = read_accessor_array(gltf, prim.attributes.POSITION, blob)
-            uv = read_accessor_array(gltf, getattr(prim.attributes, "TEXCOORD_0", None), blob)
-            if uv is None:
-                uv = np.zeros((pos.shape[0], 2), dtype=np.float32)
+class BoosterItem(ItemObject):
+    def __init__(self, x, y, z):
+        super().__init__(x, y, z)
+        self.type = OBJ_BOOSTER
 
-            idx_local = read_indices(gltf, prim.indices, blob)
-            idx_global = idx_local + offset
-            offset += pos.shape[0]
-            all_v.append(pos.astype(np.float32))
-            all_uv.append(uv.astype(np.float32))
-            all_idx.append(idx_global)
-            
-            if texid is None and prim.material is not None:
-                mat = gltf.materials[prim.material]
-                pbr = getattr(mat, "pbrMetallicRoughness", None)
-                if pbr and getattr(pbr, "baseColorTexture", None):
-                    tex_idx = pbr.baseColorTexture.index
-                    if tex_idx < len(gltf.textures):
-                        src = gltf.textures[tex_idx].source
-                        if src is not None:
-                            texid = load_texture_from_gltf(gltf, src, blob, folder)
+    def on_collision(self, car):
+        super().on_collision(car)
+        car.speed = min(car.speed + 25.0, MAX_SPEED)
 
-    V = np.concatenate(all_v, axis=0)
-    UV = np.concatenate(all_uv, axis=0)
-    IDX = np.concatenate(all_idx, axis=0)
+class AmmoItem(ItemObject):
+    def __init__(self, x, y, z):
+        super().__init__(x, y, z)
+        self.type = OBJ_BULLET
 
-    mn = V.min(axis=0)
-    mx = V.max(axis=0)
-    center = (mn + mx) * 0.5
-    V = V - center
-    size = mx - mn
-    maxdim = float(np.max(size)) if V.size else 1.0
+    def on_collision(self, car):
+        self.active = False
+        if not hasattr(car, "ammo"):
+            car.ammo = 0
 
-    return V, UV, IDX, texid, maxdim
+        car.ammo = min(car.ammo + 1, 3)
 
 def draw_cube_wire(size=0.5):
     hs = size / 2.0
@@ -307,114 +194,6 @@ class ObstacleModel:
 
         glPopMatrix()
 
-
-class WorldObject:
-    def __init__(self, x, y, z):
-        self.pos = np.array([x, y, z], dtype=np.float32)
-        self.active = True
-
-    def draw(self, camera_z):
-        pass
-
-    def on_collision(self, car):
-        pass
-
-    def is_harmful(self):
-        return False
-
-class ObstacleObject(WorldObject):
-    def __init__(self, x, y, z, model):
-        super().__init__(x, y, z)
-        self.model = model
-        self.radius = model.bounding_radius if model else 0.6
-        self.type = OBJ_OBSTACLE
-
-    def draw(self, camera_z):
-        if not self.active:
-            return
-
-        dist = abs(self.pos[2] - camera_z)
-        use_proxy = dist > LOD_PROXY_DISTANCE
-        self.model.draw_at(
-            self.pos[0], self.pos[1], self.pos[2],
-            use_proxy=use_proxy
-        )
-
-    def on_collision(self, car):
-        if not self.active:
-            return
-        self.active = False
-        car.on_collision_obstacle(self)
-
-    def is_harmful(self):
-        return True
-
-
-class ItemObject(WorldObject):
-    def __init__(self, x, y, z):
-        super().__init__(x, y, z)
-        self.active = True
-        self.type = None
-
-    def on_collision(self, car):
-        self.active = False
-
-    def draw(self, camera_z):
-        if not self.active:
-            return
-
-        model = item_models.get(self.type)
-        if not model:
-            return
-
-        dist = abs(self.pos[2] - camera_z)
-
-        if self.type == OBJ_BULLET:
-            glColor3f(0.2, 0.4, 1.0)   # 파란색
-        elif self.type == OBJ_BOOSTER:
-            glColor3f(1.0, 0.9, 0.2)   # 노란색
-        else:
-            glColor3f(1.0, 1.0, 1.0)
-
-        if model.texture:
-            glEnable(GL_TEXTURE_2D)
-            glBindTexture(GL_TEXTURE_2D, model.texture)
-
-        model.draw_at(
-            self.pos[0],
-            self.pos[1],
-            self.pos[2],
-            use_proxy=False
-        )
-
-        if model.texture:
-            glBindTexture(GL_TEXTURE_2D, 0)
-            glDisable(GL_TEXTURE_2D)
-
-class BoosterItem(ItemObject):
-    def __init__(self, x, y, z):
-        super().__init__(x, y, z)
-        self.type = OBJ_BOOSTER
-
-    def on_collision(self, car):
-        super().on_collision(car)
-        car.speed = min(car.speed + 25.0, MAX_SPEED)
-
-class AmmoItem(ItemObject):
-    def __init__(self, x, y, z):
-        super().__init__(x, y, z)
-        self.type = OBJ_BULLET
-
-    def on_collision(self, car):
-        print(">> AmmoItem collision detected")
-        self.active = False
-
-        if not hasattr(car, "ammo"):
-            car.ammo = 0
-
-        car.ammo = min(car.ammo + 1, 3)
-        print(">> ammo now:", car.ammo)
-
 class InfiniteTrack:
     def __init__(self, lane_width=2.5, seg_len=5.0):
         self.lane_width = lane_width
@@ -432,25 +211,25 @@ class InfiniteTrack:
         lanes = [-1, 0, 1]
         random.shuffle(lanes)
 
-        for lane in random.choices(lanes, k=random.randint(0, 2), weights=[0.2, 0.4, 0.4]):
+        for lane in random.choices(lanes, k=random.randint(0, 2), weights=[0.4, 0.2, 0.2]):
             x = lane * self.lane_width
 
-            if random.random() < 0.35:
-                if random.random() < 0.8:
-                    otype = random.choice(list(obstacle_models.keys()))
-                    model = obstacle_models.get(otype)
-                    if model:
-                        objects.append(ObstacleObject(x, 0.25, z + self.seg_len * 0.5, model))
+            if random.random() < 0.8:
+                otype = random.choice(list(obstacle_models.keys()))
+                model = obstacle_models.get(otype)
+                if model:
+                    objects.append(ObstacleObject(x, 0.25, z + self.seg_len * 0.5, model))
+
+            else:
+                if random.random() < 0.5:
+                    objects.append(
+                        BoosterItem(x, 0.25, z + self.seg_len * 0.5)
+                    )
 
                 else:
-                    if random.random() < 0.5:
-                        objects.append(
-                            BoosterItem(x, 0.25, z + self.seg_len * 0.5)
-                        )
-                    else:
-                        objects.append(
-                            AmmoItem(x, 0.25, z + self.seg_len * 0.5)
-                        )
+                    objects.append(
+                        AmmoItem(x, 0.25, z + self.seg_len * 0.5)
+                    )
 
         self.segments.append({
             "z": z,
@@ -507,6 +286,9 @@ class InfiniteTrack:
         groups = {}
         for seg in self.segments:
             for obj in seg["objects"]:
+                if not obj.active:
+                    continue
+
                 glColor3f(0.85, 0.15, 0.15)
                 obj.draw(camera_z)
 
@@ -560,6 +342,7 @@ class CarGLB:
         self.invuln = 0.0
         self.collision_frames = 0
         self.ammo = 0
+        self.shoot_cooldown = 0.0
 
         v, uv, idx, tex, md = load_glb_model(path)
         self.vertices = v
@@ -613,25 +396,17 @@ class CarGLB:
         global SCORE
 
         ox, oy, oz = obj.pos
-
-        # 장애물은 한 번만 충돌
         obj.active = False
-
-        # 강한 뒤로 밀림
         self.pushback_vel = -12.0
         self.pushback_timer = 0.4
 
-        # 좌우 밀림
         dx = self.pos[0] - ox
         if dx == 0:
             dx = random.choice([-1.0, 1.0])
 
         self.pos[0] += math.copysign(1.2, dx)
-
-        # 속도 강제 감소
         self.speed = max(2.0, self.speed * 0.3)
 
-        # 무적 시간
         self.invuln = 1.0
         self.collision_frames = 0
 
@@ -653,12 +428,17 @@ class CarGLB:
         if self.invuln > 0.0:
             self.invuln -= dt
 
+        self.shoot_cooldown = max(0, self.shoot_cooldown - dt)
+
+        for e in events:
+            if e.type == MOUSEBUTTONDOWN and e.button == 1:
+                self.try_shoot()
+
         tx = self.target_lane * self.track.lane_width
         self.pos[0] += (tx - self.pos[0]) * min(1.0, 8.0 * dt)
 
         if keys[K_w]:
             self.speed += 6.0 * dt
-
         else:
             self.speed *= (1.0 - min(0.5 * dt, 0.5))
 
@@ -671,7 +451,6 @@ class CarGLB:
             self.pos[2] += self.pushback_vel * dt
             self.pushback_vel *= max(0.0, 1.0 - 3.0 * dt)
             self.pushback_timer -= dt
-
         else:
             self.pos[2] += self.speed * dt
 
@@ -680,22 +459,55 @@ class CarGLB:
             if obj:
                 obj.on_collision(self)
 
+    def try_shoot(self):
+        if self.ammo <= 0:
+            return
+        
+        if self.shoot_cooldown > 0.0:
+            return
+
+        self.ammo -= 1
+        self.shoot_cooldown = 0.25
+
+        hit = self.find_front_obstacle()
+        if hit:
+            hit.active = False
+            
+            global DESTROY_SCORE
+            DESTROY_SCORE += 50
+
+    def find_front_obstacle(self):
+        max_dist = 50.0
+        lane_half = self.track.lane_width * 0.45
+
+        for seg in self.track.segments:
+            for obj in seg["objects"]:
+                if not obj.active:
+                    continue
+
+                dz = obj.pos[2] - self.pos[2]
+                if dz < 0.0 or dz > max_dist:
+                    continue
+
+                dx = abs(obj.pos[0] - self.pos[0])
+                if dx <= lane_half:
+                    return obj
+
+        return None
+
     def on_collision_obstacle(self, obj):
         global SCORE
 
         obj.active = False
 
-        # 뒤로 강하게 튕김
         self.pushback_vel = -12.0
         self.pushback_timer = 0.4
 
-        # 좌우 밀림
         dx = self.pos[0] - obj.pos[0]
         if dx == 0:
             dx = random.choice([-1.0, 1.0])
         self.pos[0] += math.copysign(1.0, dx)
 
-        # 속도 감소
         self.speed = max(2.0, self.speed * 0.3)
 
         self.invuln = 1.0
@@ -717,10 +529,8 @@ class CarGLB:
 
         # obj.active = False
 
-        # # 순간적인 속도 손실
         # self.speed *= 0.6
 
-        # # 짧은 경직 (하지만 뒤로 밀리진 않음)
         # self.pushback_vel = -4.0
         # self.pushback_timer = 0.15
 
@@ -752,36 +562,6 @@ class CarGLB:
             glDisable(GL_TEXTURE_2D)
 
         glPopMatrix()
-
-
-def load_background_layers(file_list):
-    layers = []
-    n = len(file_list)
-    for i, path in enumerate(file_list):
-        if not os.path.exists(path):
-            print(f"[warn] background file not found: {path}")
-            texid = None
-            tw, th = 1, 1
-            
-        else:
-            surf = pygame.image.load(path).convert_alpha()
-            surf = pygame.transform.rotate(surf, -90)
-            tw, th = surf.get_size()
-            texid = load_texture_from_surface(surf)
-            
-        base_speed = 0.012
-        speed_multiplier = base_speed * (1.0 + (i / max(1, n - 1)) * 3.0)
-        
-        layers.append({
-            "path": path,
-            "tex": texid,
-            "width": float(tw),
-            "height": float(th),
-            "speed": float(speed_multiplier),
-            "index": i
-        })
-        
-    return layers
 
 def draw_background_panels(layers, car_pos):
     glPushAttrib(GL_ENABLE_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT)
@@ -936,7 +716,7 @@ def countdown(car, track, bg_layers):
     countdown_max_size = 120
     countdown_min_size = 40
     countdown_clock = pygame.time.Clock()
-    countdown_duration = 1000  # ms
+    countdown_duration = 1000
 
     for count in range(5, 0, -1):
         start_time = pygame.time.get_ticks()
@@ -1017,19 +797,19 @@ def draw_image_2d(tex, x, y, w, h):
 
 def title_scene():
     clock = pygame.time.Clock()
-    pygame.display.set_caption("휴몬랩코딩 5주차")
+    pygame.display.set_caption(PROJECT_NAME)
 
     def load_ui_texture(path):
         surf = pygame.image.load(path).convert_alpha()
-        surf = pygame.transform.flip(surf, False, True)  # ★ 중요
+        surf = pygame.transform.flip(surf, False, True)
         return load_texture_from_surface(surf)
 
     bg_tex = load_ui_texture(TITLE_BG_PATH)
 
-    start_on  = load_ui_texture(UI_DICT['start_button_on'])
-    start_off = load_ui_texture(UI_DICT['start_button_off'])
-    quit_on   = load_ui_texture(UI_DICT['quit_button_on'])
-    quit_off  = load_ui_texture(UI_DICT['quit_button_off'])
+    start_on  = load_ui_texture(UI_IMAGES['start_button_on'])
+    start_off = load_ui_texture(UI_IMAGES['start_button_off'])
+    quit_on   = load_ui_texture(UI_IMAGES['quit_button_on'])
+    quit_off  = load_ui_texture(UI_IMAGES['quit_button_off'])
 
     btn_w, btn_h = 200, 70
 
@@ -1094,25 +874,26 @@ def title_scene():
 
 
 def main_scene():
-    global SCORE
+    global SCORE, DESTROY_SCORE
 
     pygame.init()
     pygame.font.init()
     pygame.display.set_mode(WINDOW_SIZE, DOUBLEBUF | OPENGL)
-    pygame.display.set_caption("휴몬랩코딩 5주차")
+    pygame.display.set_caption(PROJECT_NAME)
 
     global item_models
+    # print(ITEM_MODELS)
     item_models = {}
     item_models = {
-        OBJ_BOOSTER: ObstacleModel("files/source/item_oil_barrel.glb"),
-        OBJ_BULLET:  ObstacleModel("files/source/item_bullet.glb"),
+        OBJ_BOOSTER: ObstacleModel(ITEM_MODELS['booster']),
+        OBJ_BULLET:  ObstacleModel(ITEM_MODELS['bullet']),
     }
 
     global bullet_ui_tex
     bullet_ui_tex = None
 
-    if os.path.exists(ITEM_DICT['bullet']):
-        surf = pygame.image.load(ITEM_DICT['bullet']).convert_alpha()
+    if os.path.exists(ITEM_IMAGES['bullet']):
+        surf = pygame.image.load(ITEM_IMAGES['bullet']).convert_alpha()
         surf = pygame.transform.flip(surf, False, True)
         bullet_ui_tex = load_texture_from_surface(surf)
 
@@ -1129,7 +910,7 @@ def main_scene():
 
     global obstacle_models
     obstacle_models = {}
-    for name, path in OBSTACLE_DICT.items():
+    for name, path in OBSTACLE_MODELS.items():
         try:
             obstacle_models[name] = ObstacleModel(path)
         except Exception as e:
@@ -1190,6 +971,7 @@ def main_scene():
         draw_bullet_ui(car)
         draw_text_gl(f"Speed: {car.speed:.1f}", 20, 24, size=24, color=(255, 255, 255))
         draw_text_gl(f"Score: {SCORE}", 20, 56, size=24, color=(255, 230, 0))
+        draw_text_gl(f"+ {DESTROY_SCORE}", 100 + len(str(SCORE+1)) * 20, 56, size=24, color=(255, 140, 0))
 
         pygame.display.flip()
 
