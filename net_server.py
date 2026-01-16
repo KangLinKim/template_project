@@ -108,7 +108,7 @@ class GameServer:
 
 if __name__ == '__main__':
     import time
-    s = GameServer(port=50007)
+    s = GameServer(host="172.22.48.1", port=50007)
     s.start()
     print('server started on port 50007')
     try:

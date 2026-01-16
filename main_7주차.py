@@ -7,7 +7,30 @@ import random
 
 from codes.loader import *
 from codes.constants import *
+from codes.connector import *
 
+
+
+"""
+요구사항
+1.1. for문을 사용하여 10부터 20까지 3의 배수를 출력해주세요.
+1.2. while문을 사용하여 20부터 30까지 2의 배수를 출력해주세요.
+
+2.1. if문을 사용하여 SCORE 변수가 10 이상일 경우 "축하합니다" 메시지를,
+    낮을 경우 "분발하세요"메시지를 출력하도록 작성해주세요.
+
+3.1. Player라는 클래스를 만들고, init함수를 아래와 같이 작성해주세요.
+    - self.age라는 변수를 만들고, 나이를 적어주세요.
+    - self.name이라는 변수를 만들고, 이름을 적어주세요.
+    - self.nickname이라는 변수를 만들고, 설정할 닉네임을 적어주세요.
+    - 위에 작성한 self변수들을 매개변수로 넣을 수 있도록 수정해주세요.
+
+3.2. Player 안에 getAge라는 함수를 정의해주세요.
+    - self.age라는 변수를 반환하도록 작성해주세요.
+    
+3.3. Player 안에 setScore라는 함수를 정의해주세요.
+    - self.score를 getScore의 매개변수로 지정할 수 있도록 작성해주세요.
+"""
 
 
 class WorldObject:
@@ -52,7 +75,7 @@ class ParticleObject(WorldObject):
         self.vel = np.array([vx, vy, vz], dtype=np.float32)
         self.lifetime = lifetime
         self.size = size
-        self.type = None  # not collidable
+        self.type = None
 
     def update(self, dt):
         self.pos += self.vel * dt
@@ -360,12 +383,6 @@ class InfiniteTrack:
         for b in self.bullets:
             b.draw(camera_z)
 
-    # def draw(self, camera_z):
-    #     for seg in self.segments:
-    #         for obj in seg["objects"]:
-    #             obj.draw(camera_z)
-
-
 class CarGLB:
     def __init__(self, track, path, control_map=None):
         self.track = track
@@ -378,10 +395,8 @@ class CarGLB:
         self.collision_frames = 0
         self.ammo = 0
         self.shoot_cooldown = 0.0
-        self.score = 0  # add score per car
-        self.id = None  # will be set later
-        # control_map: dict with keys 'lane_left','lane_right','accel','brake','shoot'
-        # where values are pygame key constants or 'mouse' for mouse button shooting
+        self.score = 0
+        self.id = None
         if control_map is None:
             self.control_map = {
                 'lane_left': K_a,
@@ -417,7 +432,6 @@ class CarGLB:
 
     def handle_input(self, events):
         for e in events:
-            # allow special raw input dicts from network layer
             if isinstance(e, dict) and e.get('_raw_input'):
                 raw = e.get('raw') or {}
                 if raw.get('lane_left_press'):
@@ -481,8 +495,6 @@ class CarGLB:
             self.on_collision_bullet(obj)
 
     def update(self, dt, keys, events):
-        # `raw_input` can be provided via events as a dict under a special key
-        # but most callers will pass through normal events/keys.
         self.handle_input(events)
 
         if self.invuln > 0.0:
@@ -490,19 +502,18 @@ class CarGLB:
 
         self.shoot_cooldown = max(0, self.shoot_cooldown - dt)
 
-        # shooting input (mouse or key)
         for e in events:
             if isinstance(e, dict) and e.get('_raw_input'):
-                # raw input dict provided by network layer
                 raw = e.get('raw') or {}
                 if raw.get('shoot_press'):
                     self.try_shoot()
-                # lane presses
+
                 if raw.get('lane_left_press'):
                     self.target_lane = min(1, self.target_lane + 1)
+
                 if raw.get('lane_right_press'):
                     self.target_lane = max(-1, self.target_lane - 1)
-                # accel/brake handled below via keys emulation
+
             else:
                 if self.control_map.get('shoot') == 'mouse':
                     if e.type == MOUSEBUTTONDOWN and e.button == 1:
@@ -517,7 +528,6 @@ class CarGLB:
         accel_key = self.control_map.get('accel', K_w)
         brake_key = self.control_map.get('brake', K_s)
 
-        # allow callers to provide a `keys`-like mapping or a raw_input dict via events
         raw_input = None
         for e in events:
             if isinstance(e, dict) and e.get('_raw_input'):
@@ -566,7 +576,6 @@ class CarGLB:
         self.ammo -= 1
         self.shoot_cooldown = 0.25
 
-        # create bullet
         bullet = BulletObject(self.pos[0], self.pos[1], self.pos[2] + 1.0, owner=self.id)
         self.track.bullets.append(bullet)
 
@@ -969,16 +978,19 @@ def title_scene():
         pygame.display.flip()
 
 
-def main_scene():
+def main_scene():    
+    if not hasattr(__builtins__, "Player"):
+        raise "마지막 문제까지 해결하세요!"
+
+    
     pygame.init()
     pygame.font.init()
     pygame.display.set_mode(WINDOW_SIZE, DOUBLEBUF | OPENGL)
     pygame.display.set_caption(PROJECT_NAME)
 
-    random.seed(12345)  # Fixed seed for consistent obstacle generation
-
+    random.seed(12345)
+    
     global item_models
-    # print(ITEM_MODELS)
     item_models = {}
     item_models = {
         OBJ_BOOSTER: ObstacleModel(ITEM_MODELS['booster']),
@@ -1023,42 +1035,58 @@ def main_scene():
         print("[error] failed to load car model:", e)
         return
 
-    # network auto-connect (fixed port 50007): try to connect as client first;
-    # if connection fails, become host and start the server.
     network_mode = False
     is_host = False
     server = None
     client = None
     SERVER_PORT = 50007
-    SERVER_HOST = '127.0.0.1'
+    SERVER_HOST = None
 
-    # attempt to connect as client
-    try:
-        from net_client import GameClient
-        client = GameClient()
-        client.connect(SERVER_HOST, SERVER_PORT)
-        network_mode = True
-        is_host = False
-        print(f"[net] connected to {SERVER_HOST}:{SERVER_PORT} as client")
-    except Exception:
-        # failed to connect -> start host server
+    import threading
+    import threading
+
+    network_mode = False
+    is_host = False
+    server = None
+    client = None
+
+    # 1) LAN에서 서버 탐색
+    found = find_server()
+
+    if found:
+        SERVER_HOST, SERVER_PORT = found
+        try:
+            from net_client import GameClient
+            client = GameClient()
+            client.connect(SERVER_HOST, SERVER_PORT)
+            network_mode = True
+            is_host = False
+            print(f"[net] connected to LAN server {SERVER_HOST}:{SERVER_PORT}")
+        except Exception as e:
+            print("[net] found server but failed to connect:", e)
+
+    if not network_mode:
         try:
             from net_server import GameServer
             server = GameServer(host='0.0.0.0', port=SERVER_PORT)
             server.start()
+
+            stop_flag = threading.Event()
+            threading.Thread(
+                target=broadcast_server,
+                args=(stop_flag,),
+                daemon=True
+            ).start()
+
             network_mode = True
             is_host = True
-            print(f"[net] started host server on port {SERVER_PORT}")
+            print(f"[net] started LAN server on port {SERVER_PORT}")
         except Exception as e:
-            print('[net] failed to start server, running local split-screen:', e)
+            print("[net] failed to start server:", e)
             network_mode = False
-            is_host = False
-            client = None
-            server = None
 
     countdown(car, track, bg_layers)
 
-    # network: create second car as remote player placeholder
     car2 = CarGLB(track, MODEL_PATH)
     car2.pos[2] = car.pos[2] - 5.0
 
@@ -1091,15 +1119,12 @@ def main_scene():
                     raise SystemExit()
 
             if network_mode and is_host:
-                # host authoritative simulation: read client input and apply to car2
                 client_input = server.get_client_input() or {}
-                # convert client_input dict to a special raw event for car2.update
                 raw_ev = {'_raw_input': True, 'raw': client_input}
 
                 car.update(dt, keys, events)
                 car2.update(dt, keys, [raw_ev])
 
-                # add score for distance traveled
                 if car.pos[2] > last_z_for_score + 5.0:
                     car.score += 1
                     last_z_for_score = car.pos[2]
@@ -1107,12 +1132,10 @@ def main_scene():
                     car2.score += 1
                     last_z_for_score2 = car2.pos[2]
 
-                # update track using lead player
                 min_z = min(car.pos[2], car2.pos[2]) - TRACK_VISIBLE_BEHIND
                 max_z = max(car.pos[2], car2.pos[2]) + TRACK_VISIBLE_AHEAD
                 track.update(min_z, max_z)
 
-                # update bullets and particles
                 track.bullets[:] = [b for b in track.bullets if b.active]
                 for b in track.bullets:
                     b.update(dt)
@@ -1120,7 +1143,6 @@ def main_scene():
                 for p in track.particles:
                     p.update(dt)
 
-                # check bullet collisions
                 for b in track.bullets:
                     if not b.active:
                         continue
@@ -1133,29 +1155,28 @@ def main_scene():
                             if dz < 0.6 and dx < 0.6:
                                 if hasattr(obj, 'destroyed_by'):
                                     obj.destroyed_by.add(b.owner)
+
                                 b.active = False
-                                # create particles
                                 for _ in range(5):
                                     vx = random.uniform(-10, 10)
                                     vy = random.uniform(-10, 10)
                                     vz = random.uniform(-10, 10)
                                     p = ParticleObject(obj.pos[0], obj.pos[1], obj.pos[2], vx, vy, vz)
                                     track.particles.append(p)
-                                # score
+
                                 car.score += 50
                                 car2.score += 50
                                 break
+
                         if not b.active:
                             break
 
-                # send authoritative state to client
                 state = {
                     'car1': {'pos': car.pos.tolist(), 'speed': float(car.speed), 'ammo': int(car.ammo), 'score': int(car.score)},
                     'car2': {'pos': car2.pos.tolist(), 'speed': float(car2.speed), 'ammo': int(car2.ammo), 'score': int(car2.score)}
                 }
                 server.send_state(state)
 
-                # render local host view (full screen)
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
                 glLoadIdentity()
                 cam_distance = 8.0
@@ -1170,10 +1191,8 @@ def main_scene():
                 draw_background_panels(bg_layers, car.pos)
                 track.draw(car.pos[2])
                 car.draw()
-                # also draw remote car so host sees opponent
                 car2.draw()
 
-                # draw distance difference next to cars
                 dist_diff = int(car2.pos[2] - car.pos[2])
                 sign = "+" if dist_diff > 0 else ""
                 draw_text_gl(f"Distance: {sign}{dist_diff}m", WINDOW_SIZE[0] // 2 - 100, WINDOW_SIZE[1] - 50, size=20, color=(255, 255, 255))
@@ -1181,14 +1200,11 @@ def main_scene():
                 draw_bullet_ui(car)
                 draw_text_gl(f"Speed: {car.speed:.1f}", 20, 24, size=24, color=(255, 255, 255))
                 draw_text_gl(f"Score: {car.score}", 20, 56, size=24, color=(255, 230, 0))
-                # show opponent score
                 draw_text_gl(f"Opponent: {car2.score}", 20, 100, size=24, color=(255, 140, 0))
 
                 pygame.display.flip()
 
             elif network_mode and not is_host:
-                # client: send local inputs to server and render remote-updated state
-                # build simplified input dict for client (player2 inputs)
                 input_dict = {
                     'lane_left_press': False,
                     'lane_right_press': False,
@@ -1204,7 +1220,7 @@ def main_scene():
                             input_dict['lane_right_press'] = True
                         if e.key == K_RETURN:
                             input_dict['shoot_press'] = True
-                # continuous keys
+
                 if keys[K_UP]:
                     input_dict['accel'] = True
                 if keys[K_DOWN]:
@@ -1212,29 +1228,26 @@ def main_scene():
 
                 client.send_input(input_dict)
 
-                # receive latest authoritative state
                 state = client.get_state()
                 if state:
                     s1 = state.get('car1')
                     s2 = state.get('car2')
                     if s2:
-                        # client should update its local representation: show car2 as local player
                         car2.pos = np.array(s2.get('pos', car2.pos), dtype=np.float32)
                         car2.speed = float(s2.get('speed', car2.speed))
                         car2.ammo = int(s2.get('ammo', car2.ammo))
                         car2.score = int(s2.get('score', car2.score))
+
                     if s1:
                         car.pos = np.array(s1.get('pos', car.pos), dtype=np.float32)
                         car.speed = float(s1.get('speed', car.speed))
                         car.ammo = int(s1.get('ammo', getattr(car, 'ammo', 0)))
                         car.score = int(s1.get('score', car.score))
 
-                # update track
                 min_z = min(car.pos[2], car2.pos[2]) - TRACK_VISIBLE_BEHIND
                 max_z = max(car.pos[2], car2.pos[2]) + TRACK_VISIBLE_AHEAD
                 track.update(min_z, max_z)
 
-                # update bullets and particles (no collision check on client)
                 track.bullets[:] = [b for b in track.bullets if b.active]
                 for b in track.bullets:
                     b.update(dt)
@@ -1257,10 +1270,8 @@ def main_scene():
                 draw_background_panels(bg_layers, car2.pos)
                 track.draw(car2.pos[2])
                 car2.draw()
-                # draw remote host car
                 car.draw()
 
-                # draw distance difference
                 dist_diff = int(car.pos[2] - car2.pos[2])
                 sign = "+" if dist_diff > 0 else ""
                 draw_text_gl(f"Distance: {sign}{dist_diff}m", WINDOW_SIZE[0] // 2 - 100, WINDOW_SIZE[1] - 50, size=20, color=(255, 255, 255))
@@ -1268,24 +1279,20 @@ def main_scene():
                 draw_bullet_ui(car2)
                 draw_text_gl(f"Speed: {car2.speed:.1f}", 20, 24, size=24, color=(255, 255, 255))
                 draw_text_gl(f"Score: {car2.score}", 20, 56, size=24, color=(255, 230, 0))
-                # show opponent score at top right
                 draw_text_gl(f"Opponent: {car.score}", 20, 100, size=24, color=(255, 140, 0))
 
                 pygame.display.flip()
 
             else:
-                # local split-screen fallback (non-networked)
                 if car.pos[2] > car2.pos[2] + 5.0:
                     pass
 
-                # default behavior: keep previous split-screen implementation
                 car.update(dt, keys, events)
                 car2.update(dt, keys, events)
                 min_z = min(car.pos[2], car2.pos[2]) - TRACK_VISIBLE_BEHIND
                 max_z = max(car.pos[2], car2.pos[2]) + TRACK_VISIBLE_AHEAD
                 track.update(min_z, max_z)
 
-                # update bullets and particles
                 track.bullets[:] = [b for b in track.bullets if b.active]
                 for b in track.bullets:
                     b.update(dt)
@@ -1293,7 +1300,6 @@ def main_scene():
                 for p in track.particles:
                     p.update(dt)
 
-                # check bullet collisions
                 for b in track.bullets:
                     if not b.active:
                         continue
@@ -1307,14 +1313,12 @@ def main_scene():
                                 if hasattr(obj, 'destroyed_by'):
                                     obj.destroyed_by.add(b.owner)
                                 b.active = False
-                                # create particles
                                 for _ in range(5):
                                     vx = random.uniform(-10, 10)
                                     vy = random.uniform(-10, 10)
                                     vz = random.uniform(-10, 10)
                                     p = ParticleObject(obj.pos[0], obj.pos[1], obj.pos[2], vx, vy, vz)
                                     track.particles.append(p)
-                                # score
                                 car.score += 50
                                 car2.score += 50
                                 break
@@ -1361,7 +1365,11 @@ def main_scene():
             server.stop()
         if client:
             client.stop()
+        if is_host and 'stop_flag' in locals():
+            stop_flag.set()
+
         return
+    
     except Exception as e:
         print('main loop error', e)
         pygame.quit()
@@ -1370,7 +1378,7 @@ def main_scene():
         if client:
             client.stop()
         return
-
+    
 
 if __name__ == "__main__":
     pygame.init()

@@ -1,7 +1,7 @@
 import os
 
 
-PROJECT_NAME = "휴몬랩코딩 6주차"
+PROJECT_NAME = "휴몬랩코딩 7주차"
 
 MAX_SPEED = 80.0
 MAX_AMMO = 3

@@ -65,7 +65,7 @@ class GameClient:
 
 if __name__ == '__main__':
     c = GameClient()
-    c.connect('127.0.0.1', 50007)
+    c.connect('172.22.48.1', 50007)
     import time
     try:
         while True:
